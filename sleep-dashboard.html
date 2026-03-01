@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="睡眠ログ">
+<title>睡眠スコア計測アプリ</title>
+<style>
+  :root {
+    --night: #080c1a;
+    --deep: #0d1530;
+    --mid: #132044;
+    --glow: #4a90d9;
+    --moon: #e8d5a3;
+    --star: #c8ddf7;
+    --good: #6ec6a0;
+    --mid-score: #f0c060;
+    --bad: #e07070;
+    --text: #d0dff5;
+    --muted: #607090;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  
+  body {
+    background: var(--night);
+    color: var(--text);
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  /* Starfield */
+  .stars {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .star {
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+    animation: twinkle var(--d) ease-in-out infinite alternate;
+    opacity: var(--o);
+  }
+  @keyframes twinkle {
+    from { opacity: var(--o); transform: scale(1); }
+    to { opacity: calc(var(--o) * 0.3); transform: scale(0.7); }
+  }
+
+  /* Aurora */
+  .aurora {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 40vh;
+    background: radial-gradient(ellipse at 30% 0%, rgba(74,144,217,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 70% 0%, rgba(110,198,160,0.1) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+    animation: aurora 8s ease-in-out infinite alternate;
+  }
+  @keyframes aurora {
+    from { opacity: 0.5; transform: scaleX(1); }
+    to { opacity: 1; transform: scaleX(1.1); }
+  }
+
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 0 0 100px;
+  }
+
+  /* Header */
+  header {
+    padding: 52px 24px 24px;
+    text-align: center;
+  }
+  .moon-icon {
+    font-size: 36px;
+    display: block;
+    margin-bottom: 8px;
+    filter: drop-shadow(0 0 12px rgba(232,213,163,0.6));
+    animation: float 4s ease-in-out infinite;
+  }
+  @keyframes float {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+  h1 {
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 22px;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    color: var(--moon);
+    text-shadow: 0 0 20px rgba(232,213,163,0.4);
+  }
+  .date-display {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 6px;
+    letter-spacing: 0.1em;
+  }
+
+  /* Card */
+  .card {
+    background: rgba(13,21,48,0.7);
+    border: 1px solid rgba(74,144,217,0.15);
+    border-radius: 20px;
+    margin: 0 16px 16px;
+    padding: 20px;
+    backdrop-filter: blur(10px);
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .card:active { transform: scale(0.99); }
+
+  .card-title {
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 0.15em;
+    margin-bottom: 16px;
+    text-transform: uppercase;
+  }
+
+  /* Time inputs */
+  .time-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .time-field label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    display: block;
+    margin-bottom: 6px;
+  }
+  .time-field input[type="time"] {
+    width: 100%;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(74,144,217,0.2);
+    border-radius: 10px;
+    color: var(--star);
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 22px;
+    font-weight: 300;
+    padding: 10px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+    color-scheme: dark;
+  }
+  .time-field input[type="time"]:focus {
+    border-color: var(--glow);
+    box-shadow: 0 0 0 2px rgba(74,144,217,0.15);
+  }
+
+  /* Quality rating */
+  .quality-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .q-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    color: var(--muted);
+    font-size: 18px;
+    padding: 10px 0;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: inherit;
+  }
+  .q-btn.selected-1 { background: rgba(224,112,112,0.2); border-color: var(--bad); color: var(--bad); }
+  .q-btn.selected-2 { background: rgba(240,192,96,0.2); border-color: var(--mid-score); color: var(--mid-score); }
+  .q-btn.selected-3 { background: rgba(240,192,96,0.2); border-color: var(--mid-score); color: var(--mid-score); }
+  .q-btn.selected-4 { background: rgba(110,198,160,0.2); border-color: var(--good); color: var(--good); }
+  .q-btn.selected-5 { background: rgba(110,198,160,0.2); border-color: var(--good); color: var(--good); }
+
+  /* Save button */
+  .save-btn {
+    width: 100%;
+    background: linear-gradient(135deg, rgba(74,144,217,0.3), rgba(110,198,160,0.3));
+    border: 1px solid rgba(74,144,217,0.4);
+    border-radius: 12px;
+    color: var(--star);
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.15em;
+    padding: 14px;
+    cursor: pointer;
+    margin-top: 16px;
+    transition: all 0.2s;
+  }
+  .save-btn:hover { background: linear-gradient(135deg, rgba(74,144,217,0.5), rgba(110,198,160,0.5)); }
+  .save-btn:active { transform: scale(0.98); }
+
+  /* Score display */
+  .score-card {
+    text-align: center;
+    padding: 28px 20px;
+  }
+  .score-ring {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    margin: 0 auto 20px;
+  }
+  .score-ring svg { transform: rotate(-90deg); }
+  .score-ring circle {
+    fill: none;
+    stroke-width: 8;
+  }
+  .ring-bg { stroke: rgba(255,255,255,0.06); }
+  .ring-fill {
+    stroke: var(--glow);
+    stroke-linecap: round;
+    stroke-dasharray: 339.3;
+    stroke-dashoffset: 339.3;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1), stroke 0.5s;
+    filter: drop-shadow(0 0 6px currentColor);
+  }
+  .score-number {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .score-val {
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 42px;
+    font-weight: 300;
+    line-height: 1;
+    color: var(--moon);
+    text-shadow: 0 0 20px rgba(232,213,163,0.5);
+  }
+  .score-label { font-size: 10px; color: var(--muted); letter-spacing: 0.15em; margin-top: 4px; }
+  .score-grade {
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .score-detail {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.8;
+  }
+  .score-detail span { color: var(--star); }
+
+  /* Weekly chart */
+  .chart-area {
+    height: 80px;
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    padding: 0 4px;
+    margin-bottom: 8px;
+  }
+  .bar-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+  .bar {
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    transition: height 0.8s cubic-bezier(0.4,0,0.2,1);
+    min-height: 4px;
+    position: relative;
+  }
+  .bar-day { font-size: 9px; color: var(--muted); letter-spacing: 0.05em; }
+  .bar-score { font-size: 9px; color: var(--muted); }
+
+  /* History list */
+  .history-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+    gap: 12px;
+  }
+  .history-item:last-child { border-bottom: none; }
+  .history-date { font-size: 11px; color: var(--muted); min-width: 60px; }
+  .history-times { flex: 1; font-size: 12px; color: var(--text); }
+  .history-times small { display: block; font-size: 10px; color: var(--muted); margin-top: 2px; }
+  .history-score {
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 20px;
+    font-weight: 300;
+    min-width: 40px;
+    text-align: right;
+  }
+
+  /* Bottom nav */
+  .bottom-nav {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(8,12,26,0.92);
+    border-top: 1px solid rgba(74,144,217,0.15);
+    backdrop-filter: blur(16px);
+    display: flex;
+    z-index: 100;
+    max-width: 420px;
+    margin: 0 auto;
+  }
+  .nav-btn {
+    flex: 1;
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    padding: 14px 0 18px;
+    cursor: pointer;
+    transition: color 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .nav-btn.active { color: var(--moon); }
+  .nav-btn span { font-size: 20px; }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    top: 20px; left: 50%; transform: translateX(-50%) translateY(-80px);
+    background: rgba(13,21,48,0.95);
+    border: 1px solid rgba(110,198,160,0.4);
+    border-radius: 12px;
+    padding: 12px 24px;
+    font-size: 13px;
+    color: var(--good);
+    transition: transform 0.4s cubic-bezier(0.4,0,0.2,1);
+    z-index: 200;
+    white-space: nowrap;
+    letter-spacing: 0.05em;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .empty-state {
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 32px 0;
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    letter-spacing: 0.1em;
+  }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* Advice box */
+  .advice-box {
+    background: rgba(74,144,217,0.08);
+    border: 1px solid rgba(74,144,217,0.2);
+    border-radius: 12px;
+    padding: 14px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--star);
+    line-height: 1.8;
+    font-family: 'Meiryo', 'メイリオ', sans-serif;
+    letter-spacing: 0.05em;
+  }
+</style>
+</head>
+<body>
+
+<div class="stars" id="stars"></div>
+<div class="aurora"></div>
+
+<div class="app">
+  <header>
+    <span class="moon-icon">🌙</span>
+    <h1>睡眠スコア計測アプリ</h1>
+    <div class="date-display" id="todayDate"></div>
+  </header>
+
+  <!-- Page: Record -->
+  <div class="page active" id="page-record">
+    <div class="card">
+      <div class="card-title">📝 今日の睡眠を記録</div>
+      <div class="time-row">
+        <div class="time-field">
+          <label>就寝時刻</label>
+          <input type="time" id="bedtime" value="23:00">
+        </div>
+        <div class="time-field">
+          <label>起床時刻</label>
+          <input type="time" id="waketime" value="07:00">
+        </div>
+      </div>
+      <div class="card-title" style="margin-bottom:8px;">眠りの質</div>
+      <div class="quality-row">
+        <button class="q-btn" data-q="1" onclick="selectQuality(1)">😵</button>
+        <button class="q-btn" data-q="2" onclick="selectQuality(2)">😪</button>
+        <button class="q-btn" data-q="3" onclick="selectQuality(3)">😐</button>
+        <button class="q-btn" data-q="4" onclick="selectQuality(4)">😊</button>
+        <button class="q-btn" data-q="5" onclick="selectQuality(5)">😴</button>
+      </div>
+      <button class="save-btn" onclick="saveRecord()">✦ 記録する</button>
+    </div>
+  </div>
+
+  <!-- Page: Score -->
+  <div class="page" id="page-score">
+    <div class="card score-card" id="scoreCard">
+      <div class="empty-state">まだ記録がありません<br>睡眠を記録してスコアを確認しましょう</div>
+    </div>
+    <div class="card" id="weeklyCard" style="display:none">
+      <div class="card-title">📊 週間スコア</div>
+      <div class="chart-area" id="weeklyChart"></div>
+    </div>
+  </div>
+
+  <!-- Page: History -->
+  <div class="page" id="page-history">
+    <div class="card">
+      <div class="card-title">📅 記録一覧</div>
+      <div id="historyList">
+        <div class="empty-state">記録がありません</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom Nav -->
+<nav class="bottom-nav">
+  <button class="nav-btn active" id="nav-record" onclick="showPage('record')">
+    <span>✏️</span>記録
+  </button>
+  <button class="nav-btn" id="nav-score" onclick="showPage('score')">
+    <span>⭐</span>スコア
+  </button>
+  <button class="nav-btn" id="nav-history" onclick="showPage('history')">
+    <span>📋</span>履歴
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// Stars
+const starsEl = document.getElementById('stars');
+for (let i = 0; i < 120; i++) {
+  const s = document.createElement('div');
+  s.className = 'star';
+  const size = Math.random() * 2.5 + 0.5;
+  s.style.cssText = `width:${size}px;height:${size}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${2+Math.random()*4}s;--o:${0.3+Math.random()*0.7};`;
+  starsEl.appendChild(s);
+}
+
+// Date
+document.getElementById('todayDate').textContent = new Date().toLocaleDateString('ja-JP', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
+
+// Data
+let records = JSON.parse(localStorage.getItem('sleepRecords') || '[]');
+let selectedQuality = 3;
+
+function selectQuality(q) {
+  selectedQuality = q;
+  document.querySelectorAll('.q-btn').forEach(b => {
+    b.className = 'q-btn';
+    if (parseInt(b.dataset.q) === q) b.className = `q-btn selected-${q}`;
+  });
+}
+selectQuality(3);
+
+function calcScore(bedtime, waketime, quality) {
+  // Parse times
+  const [bh, bm] = bedtime.split(':').map(Number);
+  const [wh, wm] = waketime.split(':').map(Number);
+  let bedMin = bh * 60 + bm;
+  let wakeMin = wh * 60 + wm;
+  if (wakeMin <= bedMin) wakeMin += 24 * 60;
+  const duration = (wakeMin - bedMin) / 60;
+
+  // Duration score (ideal: 7-8h)
+  let dScore = 100;
+  if (duration < 5) dScore = 30;
+  else if (duration < 6) dScore = 55;
+  else if (duration < 7) dScore = 75;
+  else if (duration <= 8) dScore = 100;
+  else if (duration <= 9) dScore = 90;
+  else dScore = 70;
+
+  // Bedtime score (ideal: 22-24h)
+  let tScore = 100;
+  const normBed = bh >= 0 && bh < 6 ? bh + 24 : bh;
+  if (normBed < 21) tScore = 70;
+  else if (normBed <= 23) tScore = 100;
+  else if (normBed <= 24) tScore = 90;
+  else if (normBed <= 25) tScore = 75;
+  else tScore = 55;
+
+  // Quality score
+  const qScore = [0, 30, 55, 75, 90, 100][quality];
+
+  const total = Math.round(dScore * 0.4 + tScore * 0.25 + qScore * 0.35);
+  return { total: Math.min(100, total), duration: duration.toFixed(1), dScore, tScore, qScore };
+}
+
+function getGrade(score) {
+  if (score >= 90) return { text: '最高の眠り', color: '#6ec6a0' };
+  if (score >= 75) return { text: 'よく眠れた', color: '#6ec6a0' };
+  if (score >= 60) return { text: 'まずまず', color: '#f0c060' };
+  if (score >= 40) return { text: '改善の余地あり', color: '#f0c060' };
+  return { text: '休息が必要', color: '#e07070' };
+}
+
+function getAdvice(score, duration, bedHour) {
+  const advices = [];
+  const dur = parseFloat(duration);
+  if (dur < 7) advices.push('睡眠時間が短めです。7〜8時間を目標にしましょう。');
+  if (dur > 9) advices.push('少し長すぎかもしれません。規則正しい時間を意識しましょう。');
+  const bh = bedHour;
+  if (bh >= 1 && bh < 6) advices.push('就寝時刻が遅すぎます。23時前には寝るよう意識してみましょう。');
+  if (score >= 85) advices.push('素晴らしい睡眠です！この調子を維持しましょう。');
+  return advices.length > 0 ? advices[0] : '良い習慣を続けましょう。';
+}
+
+function saveRecord() {
+  const bedtime = document.getElementById('bedtime').value;
+  const waketime = document.getElementById('waketime').value;
+  const today = new Date().toLocaleDateString('ja-JP');
+  const scored = calcScore(bedtime, waketime, selectedQuality);
+
+  const rec = { date: today, bedtime, waketime, quality: selectedQuality, score: scored.total, duration: scored.duration, ts: Date.now() };
+  // Remove existing record for today
+  records = records.filter(r => r.date !== today);
+  records.unshift(rec);
+  if (records.length > 30) records = records.slice(0, 30);
+  localStorage.setItem('sleepRecords', JSON.stringify(records));
+
+  showToast('✦ 記録しました！スコア: ' + scored.total);
+  setTimeout(() => showPage('score'), 800);
+}
+
+function showPage(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.getElementById('nav-' + page).classList.add('active');
+
+  if (page === 'score') renderScore();
+  if (page === 'history') renderHistory();
+}
+
+function renderScore() {
+  const card = document.getElementById('scoreCard');
+  if (records.length === 0) {
+    card.innerHTML = '<div class="empty-state">まだ記録がありません<br>睡眠を記録してスコアを確認しましょう</div>';
+    document.getElementById('weeklyCard').style.display = 'none';
+    return;
+  }
+
+  const r = records[0];
+  const grade = getGrade(r.score);
+  const ringColor = r.score >= 75 ? '#6ec6a0' : r.score >= 50 ? '#f0c060' : '#e07070';
+  const offset = 339.3 * (1 - r.score / 100);
+  const bedHour = parseInt(r.bedtime.split(':')[0]);
+  const advice = getAdvice(r.score, r.duration, bedHour);
+
+  card.innerHTML = `
+    <div class="score-ring">
+      <svg width="140" height="140" viewBox="0 0 140 140">
+        <circle class="ring-bg" cx="70" cy="70" r="54"/>
+        <circle class="ring-fill" cx="70" cy="70" r="54" id="ringFill" style="stroke:${ringColor}"/>
+      </svg>
+      <div class="score-number">
+        <div class="score-val" id="animScore">0</div>
+        <div class="score-label">SCORE</div>
+      </div>
+    </div>
+    <div class="score-grade" style="color:${grade.color}">${grade.text}</div>
+    <div class="score-detail">
+      就寝 <span>${r.bedtime}</span> → 起床 <span>${r.waketime}</span><br>
+      睡眠時間 <span>${r.duration}時間</span> ／ ${r.date}
+    </div>
+    <div class="advice-box">💡 ${advice}</div>
+  `;
+
+  // Animate ring
+  setTimeout(() => {
+    document.getElementById('ringFill').style.strokeDashoffset = offset;
+  }, 100);
+
+  // Animate number
+  let cur = 0;
+  const target = r.score;
+  const interval = setInterval(() => {
+    cur = Math.min(cur + 2, target);
+    const el = document.getElementById('animScore');
+    if (el) el.textContent = cur;
+    if (cur >= target) clearInterval(interval);
+  }, 20);
+
+  // Weekly chart
+  if (records.length >= 2) {
+    document.getElementById('weeklyCard').style.display = 'block';
+    renderWeekly();
+  }
+}
+
+function renderWeekly() {
+  const recent = records.slice(0, 7).reverse();
+  const max = Math.max(...recent.map(r => r.score));
+  const chart = document.getElementById('weeklyChart');
+  const days = ['日','月','火','水','木','金','土'];
+
+  chart.innerHTML = recent.map(r => {
+    const d = new Date(r.ts);
+    const day = days[d.getDay()];
+    const h = Math.round((r.score / 100) * 70);
+    const color = r.score >= 75 ? '#6ec6a0' : r.score >= 50 ? '#f0c060' : '#e07070';
+    return `<div class="bar-wrap">
+      <div class="bar-score">${r.score}</div>
+      <div class="bar" style="height:${h}px;background:${color};opacity:0.8;"></div>
+      <div class="bar-day">${day}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  if (records.length === 0) {
+    list.innerHTML = '<div class="empty-state">記録がありません</div>';
+    return;
+  }
+  const emojis = ['', '😵', '😪', '😐', '😊', '😴'];
+  list.innerHTML = records.map(r => {
+    const color = r.score >= 75 ? '#6ec6a0' : r.score >= 50 ? '#f0c060' : '#e07070';
+    return `<div class="history-item">
+      <div class="history-date">${r.date.split('/').slice(1).join('/')}</div>
+      <div class="history-times">
+        ${r.bedtime} → ${r.waketime}
+        <small>${r.duration}時間 ${emojis[r.quality]}</small>
+      </div>
+      <div class="history-score" style="color:${color}">${r.score}</div>
+    </div>`;
+  }).join('');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
